@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-# ─── GLOBALS ────────────────────────────────────────────────
+# GLOBALS
 lyrics_timeline = []
 plain_lyrics    = ""
 artist_g        = ""
@@ -57,7 +57,7 @@ def save_cache():
         except Exception:
             pass
 
-# ─── 1. PLAYER FUNCTIONS ────────────────────────────────────
+#  1. PLAYER FUNCTIONS
 
 def get_active_player():
     try:
@@ -121,7 +121,7 @@ def fetch_lyrics_threaded(artist, title, track_id):
         "User-Agent": "lyricT/1.0.0 (https://github.com/satvik/lyricT)"
     }
 
-    # PRIMARY: lrclib with correct param names
+    
     try:
         session = get_http_session()
         r = session.get(
@@ -141,7 +141,7 @@ def fetch_lyrics_threaded(artist, title, track_id):
             elif plain_val:
                 plain = plain_val
         elif r.status_code == 404:
-            # Only try secondary search if exact match returned 404
+            
             try:
                 session = get_http_session()
                 r = session.get(
@@ -178,13 +178,13 @@ def fetch_lyrics_threaded(artist, title, track_id):
     }
     save_cache()
 
-    # Only update active globals if this is still the current track
+   
     if current_track == track_id:
         lyrics_timeline = timeline
         plain_lyrics = plain
         if api_duration > 0:
             duration_g = api_duration
-        fetch_done = True  # Mark fetch complete only for current track
+        fetch_done = True  
 
 def parse_lrc(lrc_string):
     """Parse [mm:ss.xx] lyric lines into (seconds_float, text) list."""
@@ -198,7 +198,7 @@ def parse_lrc(lrc_string):
             timeline.append((mins * 60 + secs, text))
     return sorted(timeline, key=lambda x: x[0])
 
-# ─── 3. DISPLAY ENGINE ───────────────────────────────────────
+# 3. DISPLAY ENGINE 
 
 last_cols = 0
 last_rows = 0
@@ -251,7 +251,7 @@ def get_background_theme_from_image(img_path_or_url):
         
         h, s, v = rgb_to_hsv(avg_r, avg_g, avg_b)
         
-        # Background should be dark (v = 0.15) and moderately saturated
+        # Background should be dark (v = 0.15) 
         s_target = max(0.20, min(s * 1.5, 0.65))
         v_target = 0.15
         
@@ -310,7 +310,7 @@ def get_bg_color(r, rows):
         
     pct = r / (rows - 1)
     
-    # top is 30% brighter, bottom is 40% darker
+    # top is brighter, bottom is darker
     top_r = min(255, int(base_r * 1.3))
     top_g = min(255, int(base_g * 1.3))
     top_b = min(255, int(base_b * 1.3))
@@ -636,8 +636,7 @@ def render_ui(position, duration, artist, title):
     sys.stdout.write("\033[H" + buffer)
     sys.stdout.flush()
 
-# ─── 4. MAIN LOOP ────────────────────────────────────────────
-
+# 4. MAIN LOOP 
 player_lock = threading.Lock()
 player_active_g = False
 is_playing_g = False
