@@ -259,13 +259,43 @@ def get_background_theme_from_image(img_path_or_url):
     except Exception:
         return None
 
-def update_theme_color_threaded(art_url):
+def get_artwork_url_fallback(artist, title):
+    try:
+        import urllib.parse
+        term = f"{artist} {title}"
+        safe_term = urllib.parse.quote_plus(term)
+        url = f"https://itunes.apple.com/search?term={safe_term}&limit=1&entity=song"
+        session = get_http_session()
+        r = session.get(url, timeout=2.0)
+        if r.status_code == 200:
+            data = r.json()
+            results = data.get("results", [])
+            if results:
+                return results[0].get("artworkUrl100", "")
+    except Exception:
+        pass
+    return ""
+
+def update_theme_color_threaded(art_url, track_id=None, artist=None, title=None):
     global theme_color_g
-    if not art_url:
-        theme_color_g = (45, 15, 22)
-        return
+    color = None
+    
+    # 1. Try to fetch color from player's reported art_url
+    if art_url:
+        color = get_background_theme_from_image(art_url)
         
-    color = get_background_theme_from_image(art_url)
+    # 2. Fall back to search API if player didn't provide artwork URL
+    if not color and artist and title:
+        fetched_art_url = get_artwork_url_fallback(artist, title)
+        if fetched_art_url:
+            color = get_background_theme_from_image(fetched_art_url)
+            
+    # 3. Last resort fallback: deterministic hashing
+    if not color and track_id:
+        import hashlib
+        h_val = int(hashlib.md5(track_id.encode('utf-8')).hexdigest(), 16) % 1000 / 1000.0
+        color = hsv_to_rgb(h_val, 0.45, 0.12)
+        
     if color:
         theme_color_g = color
     else:
@@ -512,25 +542,43 @@ def render_ui(position, duration, artist, title):
                 active_idx = 0
             
         spacing = 2 if rows >= 20 else 1
+
+        # Guard: active_idx=-1 means before first lyric; treat as 0 for layout
+        display_idx = max(0, active_idx)
+
+        # Original clamping logic adapted for spacing multiplier
+        top_limit    = header_height + 1
+        bottom_limit = rows - footer_height - 2
+
         target_active_row = active_row
-        
+        # Don't scroll above the first lyric
+        target_active_row = min(target_active_row, top_limit + display_idx * spacing)
+        # Don't scroll below the last lyric
+        if len(lyrics) * spacing > lyric_rows:
+            target_active_row = max(
+                target_active_row,
+                bottom_limit - (len(lyrics) - 1 - display_idx) * spacing
+            )
+
         for r in range(header_height, rows - footer_height):
             offset = r - target_active_row
-            
+
+            # In double-spacing mode, only even offsets carry a lyric line
             if spacing == 2:
-                if offset % 2 == 0:
-                    idx = active_idx + offset // 2
-                else:
+                if offset % 2 != 0:
                     screen_lines[r] = make_empty_row(cols, get_bg_color(r, rows))
                     continue
+                idx = display_idx + offset // 2
             else:
-                idx = active_idx + offset
-                
+                idx = display_idx + offset
+
             bg_color = get_bg_color(r, rows)
-            
+
             if 0 <= idx < len(lyrics):
                 text = lyrics[idx]
-                if idx == active_idx:
+                is_active = (offset == 0) and (active_idx >= 0)
+
+                if is_active:
                     if lyrics_timeline:
                         ts = lyrics_timeline[idx][0]
                         age = visual_position - ts
@@ -540,49 +588,42 @@ def render_ui(position, duration, artist, title):
                         age = position % 8.0
                         t = min(1.0, max(0.0, age / 0.5))
                         t = t * t * (3 - 2 * t)
-                        
+
                     bg_r, bg_g, bg_b = bg_color
                     opacity_fade = 0.35
                     fg_r_start = int(bg_r + (255 - bg_r) * opacity_fade)
                     fg_g_start = int(bg_g + (255 - bg_g) * opacity_fade)
                     fg_b_start = int(bg_b + (255 - bg_b) * opacity_fade)
-                    
-                    fg_r_end = 255
-                    fg_g_end = 255
-                    fg_b_end = 255
-                    
-                    fg_r = int(fg_r_start + (fg_r_end - fg_r_start) * t)
-                    fg_g = int(fg_g_start + (fg_g_end - fg_g_start) * t)
-                    fg_b = int(fg_b_start + (fg_b_end - fg_b_start) * t)
+
+                    fg_r = int(fg_r_start + (255 - fg_r_start) * t)
+                    fg_g = int(fg_g_start + (255 - fg_g_start) * t)
+                    fg_b = int(fg_b_start + (255 - fg_b_start) * t)
                     fg_color = (fg_r, fg_g, fg_b)
-                    
+
                     acc_r, acc_g, acc_b = get_accent_color()
-                    acc_r_start = int(bg_r + (acc_r - bg_r) * opacity_fade)
-                    acc_g_start = int(bg_g + (acc_g - bg_g) * opacity_fade)
-                    acc_b_start = int(bg_b + (acc_b - bg_b) * opacity_fade)
-                    acc_r_cur = int(acc_r_start + (acc_r - acc_r_start) * t)
-                    acc_g_cur = int(acc_g_start + (acc_g - acc_g_start) * t)
-                    acc_b_cur = int(acc_b_start + (acc_b - acc_b_start) * t)
+                    acc_r_cur = int(bg_r + (acc_r - bg_r) * (opacity_fade + (1 - opacity_fade) * t))
+                    acc_g_cur = int(bg_g + (acc_g - bg_g) * (opacity_fade + (1 - opacity_fade) * t))
+                    acc_b_cur = int(bg_b + (acc_b - bg_b) * (opacity_fade + (1 - opacity_fade) * t))
                     accent_fg = (acc_r_cur, acc_g_cur, acc_b_cur)
-                    
+
                     bg_color_active = (
-                        min(255, bg_r + 25),
-                        min(255, bg_g + 15),
-                        min(255, bg_b + 20)
+                        min(255, bg_color[0] + 25),
+                        min(255, bg_color[1] + 15),
+                        min(255, bg_color[2] + 20)
                     )
                     screen_lines[r] = center_active_lyric(text, cols, bg_color_active, fg_color, accent_fg)
                 else:
-                    distance = abs(idx - active_idx)
+                    distance = abs(idx - display_idx)
                     max_dist = max(1, lyric_rows // (2 * spacing))
-                    fade = max(0.12, 1.0 - (distance / max_dist) * 0.8)
-                    opacity = 0.50 * fade
-                    
+                    fade = max(0.12, 1.0 - (distance / max_dist) * 0.75)
+                    opacity = 0.48 * fade
+
                     bg_r, bg_g, bg_b = bg_color
                     fg_r = int(bg_r + (255 - bg_r) * opacity)
                     fg_g = int(bg_g + (255 - bg_g) * opacity)
                     fg_b = int(bg_b + (255 - bg_b) * opacity)
                     fg_color = (fg_r, fg_g, fg_b)
-                    
+
                     screen_lines[r] = center_line(text, cols, bg_color, fg_color, bold=False)
             else:
                 screen_lines[r] = make_empty_row(cols, get_bg_color(r, rows))
@@ -597,6 +638,59 @@ def render_ui(position, duration, artist, title):
 
 # ─── 4. MAIN LOOP ────────────────────────────────────────────
 
+player_lock = threading.Lock()
+player_active_g = False
+is_playing_g = False
+artist_cached_g = ""
+title_cached_g = ""
+position_ref_g = 0.0
+time_ref_g = 0.0
+duration_cached_g = 0.0
+art_url_cached_g = ""
+
+def player_query_worker():
+    global player_active_g, is_playing_g, artist_cached_g, title_cached_g
+    global position_ref_g, time_ref_g, duration_cached_g, art_url_cached_g
+    
+    while True:
+        try:
+            player = get_active_player()
+            if player:
+                new_artist, new_title, position, duration, art_url = get_player_data(player)
+                now_new = time.time()
+                
+                with player_lock:
+                    player_active_g = True
+                    is_playing_g = True
+                    
+                    if new_title:
+                        track_changed = (new_artist != artist_cached_g or new_title != title_cached_g)
+                        artist_cached_g = new_artist
+                        title_cached_g = new_title
+                        duration_cached_g = duration
+                        art_url_cached_g = art_url
+                        
+                        if track_changed or time_ref_g == 0:
+                            position_ref_g = position
+                            time_ref_g = now_new
+                        else:
+                            # Smooth alignment logic (PLL)
+                            current_extrapolated = position_ref_g + (now_new - time_ref_g)
+                            if abs(position - current_extrapolated) > 1.2:
+                                # User seeked or large discrepancy, jump immediately
+                                position_ref_g = position
+                            else:
+                                # Soft blend to match playerctl's clock without jumps
+                                position_ref_g = current_extrapolated + 0.15 * (position - current_extrapolated)
+                            time_ref_g = now_new
+            else:
+                with player_lock:
+                    player_active_g = False
+                    is_playing_g = False
+        except Exception:
+            pass
+        time.sleep(0.5)
+
 def main():
     global current_track, lyrics_timeline, plain_lyrics
     global artist_g, title_g, duration_g, fetch_done, lyrics_cache
@@ -606,53 +700,40 @@ def main():
     sys.stdout.write("\033[?25l")
     sys.stdout.write("\033[?1049h")
     sys.stdout.flush()
-    
-    player = None
-    last_query = 0.0
-    artist_cached = ""
-    title_cached = ""
-    position_cached = 0.0
-    duration_cached = 0.0
-    art_url_cached = ""
-    last_position_update = 0.0
-    is_playing = False
+
+    # Start the player query background thread
+    t_query = threading.Thread(target=player_query_worker, daemon=True)
+    t_query.start()
 
     try:
         while True:
             now = time.time()
             cols, rows = shutil.get_terminal_size()
-            
-            if now - last_query > 0.5:
-                player = get_active_player()
-                if player:
-                    is_playing = True
-                    new_artist, new_title, position, duration, art_url = get_player_data(player)
-                    if new_title:
-                        artist_cached = new_artist
-                        title_cached = new_title
-                        position_cached = position
-                        duration_cached = duration
-                        art_url_cached = art_url
-                        last_position_update = now
-                else:
-                    is_playing = False
-                last_query = now
 
-            if not player:
+            with player_lock:
+                active = player_active_g
+                playing = is_playing_g
+                artist = artist_cached_g
+                title = title_cached_g
+                pos_ref = position_ref_g
+                t_ref = time_ref_g
+                dur = duration_cached_g
+                art_url = art_url_cached_g
+
+            if not active:
                 render_no_player(cols, rows)
                 time.sleep(0.1)
                 continue
 
-            track_id = f"{artist_cached}|||{title_cached}"
-
-            if track_id != current_track and title_cached:
+            track_id = f"{artist}|||{title}"
+            if track_id != current_track and title:
                 current_track = track_id
-                artist_g, title_g = artist_cached, title_cached
-                
+                artist_g, title_g = artist, title
+
                 # Fetch theme color in the background
                 t_theme = threading.Thread(
                     target=update_theme_color_threaded,
-                    args=(art_url_cached,),
+                    args=(art_url, track_id, artist, title),
                     daemon=True
                 )
                 t_theme.start()
@@ -661,28 +742,28 @@ def main():
                     cached = lyrics_cache[track_id]
                     lyrics_timeline = cached["timeline"]
                     plain_lyrics    = cached["plain"]
-                    duration_g      = cached["duration"] if cached["duration"] > 0 else duration_cached
+                    duration_g      = cached["duration"] if cached["duration"] > 0 else dur
                     fetch_done      = True
                 else:
                     lyrics_timeline = []
                     plain_lyrics    = ""
-                    duration_g      = duration_cached
+                    duration_g      = dur
                     fetch_done      = False
                     
                     t = threading.Thread(
                         target=fetch_lyrics_threaded,
-                        args=(artist_cached, title_cached, track_id),
+                        args=(artist, title, track_id),
                         daemon=True
                     )
                     t.start()
 
-            if is_playing:
-                dt = now - last_position_update
-                extrapolated_pos = position_cached + dt
+            if playing:
+                # Monotonic progression based on actual elapsed wall time since the last reference update
+                extrapolated_pos = pos_ref + (now - t_ref)
                 if duration_g > 0:
                     extrapolated_pos = min(extrapolated_pos, duration_g)
             else:
-                extrapolated_pos = position_cached
+                extrapolated_pos = pos_ref
 
             render_ui(extrapolated_pos, duration_g, artist_g, title_g)
             time.sleep(0.05)
