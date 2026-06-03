@@ -36,7 +36,7 @@ if [ -f "$SCRIPT_SRC" ]; then
     cp "$SCRIPT_SRC" "$BIN_DIR/lyricT"
 else
     # Installed via curl
-    GITHUB_RAW_URL="https://raw.githubusercontent.com/satvik/lyricT/main/lyricT.py"
+    GITHUB_RAW_URL="https://raw.githubusercontent.com/Bamvoov/lyricT/main/lyricT.py"
     echo -e "${BLUE}Downloading script from GitHub...${NC}"
     if ! curl -sSL "$GITHUB_RAW_URL" -o "$BIN_DIR/lyricT"; then
         echo -e "${RED}❌ Error: Failed to download lyricT.py from GitHub.${NC}"

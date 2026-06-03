@@ -118,7 +118,7 @@ def fetch_lyrics_threaded(artist, title, track_id):
     api_duration = 0.0
 
     headers = {
-        "User-Agent": "lyricT/1.0.0 (https://github.com/satvik/lyricT)"
+        "User-Agent": "lyricT/1.0.0 (https://github.com/Bamvoov/lyricT)"
     }
 
     

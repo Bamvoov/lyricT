@@ -18,7 +18,7 @@ A responsive, centered, dynamically-themed CLI lyrics syncer for Linux media pla
 Run the following command in your terminal to install `lyricT` to your local user binary directory (`~/.local/bin/`):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/satvik/lyricT/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Bamvoov/lyricT/main/install.sh | bash
 ```
 
 > [!NOTE]
@@ -33,7 +33,7 @@ curl -sSL https://raw.githubusercontent.com/satvik/lyricT/main/install.sh | bash
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/satvik/lyricT.git
+   git clone https://github.com/Bamvoov/lyricT.git
    cd lyricT
    ```
 
