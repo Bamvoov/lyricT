@@ -3,9 +3,7 @@
 A responsive, centered, dynamically-themed CLI lyrics syncer for Linux media players. It connects to active players (Spotify, VLC, Audacious, Firefox, Chrome, etc.) via MPRIS/playerctl, fetches synced lyrics, and displays them beautifully in your terminal with smooth transitions and cover-art-matching background gradients.
 
 ---
-
-https://github.com/user-attachments/assets/4b8cb312-f139-4971-a252-b143f3fc866a
-
+https://github.com/user-attachments/assets/1a7281cd-ae7d-411f-8611-77268548bf09
 
 ## Features
 
