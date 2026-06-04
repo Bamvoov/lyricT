@@ -4,6 +4,9 @@ A responsive, centered, dynamically-themed CLI lyrics syncer for Linux media pla
 
 ---
 
+https://github.com/user-attachments/assets/4b8cb312-f139-4971-a252-b143f3fc866a
+
+
 ## Features
 
 - ✨ **Dynamic Theming:** Automatically extracts the dominant color palette from your current track's album art. If your music player does not provide cover art URLs (e.g., Spotify Web in Firefox/Chrome), lyricT performs an instantaneous background query against the iTunes Search API to fetch the official artwork.
