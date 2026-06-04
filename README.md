@@ -8,7 +8,6 @@ https://github.com/user-attachments/assets/1a7281cd-ae7d-411f-8611-77268548bf09
 ## Features
 
 - ✨ **Dynamic Theming:** Automatically extracts the dominant color palette from your current track's album art. If your music player does not provide cover art URLs (e.g., Spotify Web in Firefox/Chrome), lyricT performs an instantaneous background query against the iTunes Search API to fetch the official artwork.
-- 🚀 **Butter-Smooth Scrolling:** Features an asynchronous query engine and a Phase-Locked Loop (PLL) filter that matches MPRIS events to local monotonic system clocks. This eliminates the text-highlight jitter and visual stutter common in other CLI lyric decoders.
 - 📏 **Adaptive Layout:** Dynamically adjusts padding and scaling (automatically applying spacing on larger terminal windows to fill the screen).
 - 🧠 **Smart Caching:** Local caching of lyrics under `~/.cache/lyricT` to ensure instant loading of previously played tracks.
 
