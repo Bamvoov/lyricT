@@ -820,7 +820,7 @@ def cava_worker():
     num_bars = 48
     config_content = f"""[general]
 bars = {num_bars}
-framerate = 30
+framerate = 60
 autosens = 1
 
 [output]
@@ -941,7 +941,7 @@ def main():
                 extrapolated_pos = pos_ref
 
             render_ui(extrapolated_pos, duration_g, artist_g, title_g)
-            time.sleep(0.05)
+            time.sleep(0.016)
 
     except KeyboardInterrupt:
         pass
