@@ -65,7 +65,29 @@ else
 fi
 
 echo -e "\n${GREEN}🎉 lyricT installed successfully to ${BIN_DIR}/lyricT!${NC}"
-echo -e "💡 Ensure that ${BLUE}~/.local/bin${NC} is in your PATH."
-echo -e "   If it isn't, add the following line to your shell configuration file (e.g., ~/.bashrc or ~/.zshrc):"
-echo -e "   ${BLUE}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+
+# Check if PATH contains ~/.local/bin
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo -e "💡 Ensure that ${BLUE}~/.local/bin${NC} is in your PATH."
+    case "$(basename "${SHELL:-}")" in
+        fish)
+            echo -e "   Since you are using fish shell, run this command to add it permanently:"
+            echo -e "   ${BLUE}fish_add_path ~/.local/bin${NC}"
+            ;;
+        zsh)
+            echo -e "   If it isn't, add the following line to your ${BLUE}~/.zshrc${NC}:"
+            echo -e "   ${BLUE}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            ;;
+        bash)
+            echo -e "   If it isn't, add the following line to your ${BLUE}~/.bashrc${NC}:"
+            echo -e "   ${BLUE}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            ;;
+        *)
+            echo -e "   If it isn't, add the following line to your shell configuration file (e.g., ~/.bashrc or ~/.zshrc):"
+            echo -e "   ${BLUE}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            ;;
+    esac
+fi
+
 echo -e "\nRun the program with: ${GREEN}lyricT${NC}"
+
