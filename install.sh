@@ -25,6 +25,15 @@ if ! command -v playerctl &> /dev/null; then
     echo -e "   - Fedora: ${BLUE}sudo dnf install playerctl${NC}"
 fi
 
+# Check cava installation (optional for audio visualizer)
+if ! command -v cava &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Note: 'cava' is not installed. Installing cava enables real-time background audio visualization!${NC}"
+    echo -e "   You can install it using your package manager, e.g.:"
+    echo -e "   - Arch Linux: ${BLUE}sudo pacman -S cava${NC}"
+    echo -e "   - Debian/Ubuntu: ${BLUE}sudo apt install cava${NC}"
+    echo -e "   - Fedora: ${BLUE}sudo dnf install cava${NC}"
+fi
+
 # 3. Create destination directory
 BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"

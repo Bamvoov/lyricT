@@ -8,6 +8,7 @@ import threading
 import shutil
 import colorsys
 import warnings
+import tempfile
 from urllib.parse import unquote
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -22,6 +23,8 @@ fetch_done      = True
 current_track   = ""
 lyrics_cache    = {}
 theme_color_g   = (45, 15, 22)
+spectrum_g      = []
+cava_running_g  = False
 
 CACHE_DIR = os.path.expanduser("~/.cache/lyricT")
 CACHE_FILE = os.path.join(CACHE_DIR, "lyrics_cache.json")
@@ -458,6 +461,132 @@ def render_no_player(cols, rows):
     sys.stdout.write("\033[H" + buffer)
     sys.stdout.flush()
 
+def cells_to_ansi(cells):
+    if not cells:
+        return ""
+    parts = []
+    last_bg = None
+    last_fg = None
+    last_bold = None
+    
+    for cell in cells:
+        bg = cell['bg']
+        fg = cell['fg']
+        bold = cell['bold']
+        char = cell['char']
+        
+        if bg != last_bg or fg != last_fg or bold != last_bold:
+            style_code = "1;" if bold else ""
+            parts.append(f"\033[0;{style_code}48;2;{bg[0]};{bg[1]};{bg[2]};38;2;{fg[0]};{fg[1]};{fg[2]}m")
+            last_bg = bg
+            last_fg = fg
+            last_bold = bold
+            
+        parts.append(char)
+        
+    parts.append("\033[0m")
+    return "".join(parts)
+
+def render_canvas_row(r, rows, cols, header_h=0, footer_h=0, text=None, is_active=False, lyric_fg=(255, 255, 255), accent_fg=None, bold=False):
+    global spectrum_g, cava_running_g
+    bg_color = get_bg_color(r, rows)
+    bg_r, bg_g, bg_b = bg_color
+    
+    acc_r, acc_g, acc_b = get_accent_color()
+    if accent_fg is None:
+        accent_fg = (acc_r, acc_g, acc_b)
+        
+    bar_fg = (
+        int(bg_r + 0.35 * (acc_r - bg_r)),
+        int(bg_g + 0.35 * (acc_g - bg_g)),
+        int(bg_b + 0.35 * (acc_b - bg_b))
+    )
+    bar_bg_tint = (
+        int(bg_r + 0.25 * (acc_r - bg_r)),
+        int(bg_g + 0.25 * (acc_g - bg_g)),
+        int(bg_b + 0.25 * (acc_b - bg_b))
+    )
+    
+    if is_active:
+        bg_color = (
+            min(255, bg_color[0] + 25),
+            min(255, bg_color[1] + 15),
+            min(255, bg_color[2] + 20)
+        )
+        bar_bg_tint = (
+            min(255, bar_bg_tint[0] + 30),
+            min(255, bar_bg_tint[1] + 20),
+            min(255, bar_bg_tint[2] + 25)
+        )
+
+    cells = [{'char': ' ', 'fg': (0, 0, 0), 'bg': bg_color, 'bold': False} for _ in range(cols)]
+    lyric_rows = max(1, rows - header_h - footer_h)
+    r_rel = max(0, r - header_h)
+    y_from_bot = lyric_rows - 1 - r_rel
+
+    spec = spectrum_g
+    if cava_running_g and spec and max(spec) > 0.005:
+        bar_w = 2 if cols >= 60 else 1
+        gap_w = 1
+        step = bar_w + gap_w
+        n_bars = max(1, (cols + gap_w) // step)
+        total_w = n_bars * step - gap_w
+        left_margin = max(0, (cols - total_w) // 2)
+        
+        for c in range(cols):
+            if left_margin <= c < left_margin + total_w:
+                c_rel = c - left_margin
+                if c_rel % step < bar_w:
+                    bar_idx = c_rel // step
+                    spec_idx = int((bar_idx / n_bars) * len(spec))
+                    val = spec[min(len(spec) - 1, max(0, spec_idx))]
+                    bar_h = val * lyric_rows
+                    
+                    if y_from_bot < int(bar_h):
+                        cells[c]['char'] = '█'
+                        cells[c]['fg'] = bar_fg
+                    elif y_from_bot == int(bar_h):
+                        rem = bar_h - int(bar_h)
+                        if rem > 0.1:
+                            glyphs = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+                            g_idx = min(7, max(0, int(rem * 8)))
+                            cells[c]['char'] = glyphs[g_idx]
+                            cells[c]['fg'] = bar_fg
+
+    if text and text.strip():
+        text_chars = []
+        if is_active:
+            for ch in "▶  ":
+                text_chars.append((ch, accent_fg, False))
+            for ch in text:
+                text_chars.append((ch, lyric_fg, True))
+            for ch in "  ◀":
+                text_chars.append((ch, accent_fg, False))
+        else:
+            for ch in text:
+                text_chars.append((ch, lyric_fg, bold))
+                
+        if len(text_chars) > cols - 4:
+            if is_active and len(text_chars) > cols - 13:
+                text_chars = text_chars[:cols - 13] + [('.', lyric_fg, True)] * 3 + text_chars[-3:]
+            elif len(text_chars) > cols - 7:
+                text_chars = text_chars[:cols - 7] + [('.', lyric_fg, bold)] * 3
+                
+        start_col = (cols - len(text_chars)) // 2
+        for i, (ch, fg, b) in enumerate(text_chars):
+            c = start_col + i
+            if 0 <= c < cols:
+                had_bar = (cells[c]['char'] != ' ')
+                cells[c]['char'] = ch
+                cells[c]['fg'] = fg
+                cells[c]['bold'] = b
+                if had_bar:
+                    cells[c]['bg'] = bar_bg_tint
+                else:
+                    cells[c]['bg'] = bg_color
+                    
+    return cells_to_ansi(cells)
+
 def render_ui(position, duration, artist, title):
     global last_cols, last_rows, lyrics_timeline, plain_lyrics, fetch_done
     
@@ -514,20 +643,18 @@ def render_ui(position, duration, artist, title):
         spinner = spinner_chars[int(time.time() * 10) % len(spinner_chars)]
         fetching_msg = f"{spinner}  Fetching lyrics..."
         for r in range(header_height, rows - footer_height):
-            bg_color = get_bg_color(r, rows)
             if r == active_row:
-                screen_lines[r] = center_line(fetching_msg, cols, bg_color, (220, 180, 100))
+                screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height, text=fetching_msg, lyric_fg=(220, 180, 100))
             else:
-                screen_lines[r] = make_empty_row(cols, bg_color)
+                screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height)
                 
     elif not lyrics_timeline and not plain_lyrics:
         warning_msg = "⚠️  No lyrics found for this track."
         for r in range(header_height, rows - footer_height):
-            bg_color = get_bg_color(r, rows)
             if r == active_row:
-                screen_lines[r] = center_line(warning_msg, cols, bg_color, (220, 100, 100))
+                screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height, text=warning_msg, lyric_fg=(220, 100, 100))
             else:
-                screen_lines[r] = make_empty_row(cols, bg_color)
+                screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height)
                 
     else:
         if lyrics_timeline:
@@ -566,7 +693,7 @@ def render_ui(position, duration, artist, title):
             # In double-spacing mode, only even offsets carry a lyric line
             if spacing == 2:
                 if offset % 2 != 0:
-                    screen_lines[r] = make_empty_row(cols, get_bg_color(r, rows))
+                    screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height)
                     continue
                 idx = display_idx + offset // 2
             else:
@@ -606,12 +733,7 @@ def render_ui(position, duration, artist, title):
                     acc_b_cur = int(bg_b + (acc_b - bg_b) * (opacity_fade + (1 - opacity_fade) * t))
                     accent_fg = (acc_r_cur, acc_g_cur, acc_b_cur)
 
-                    bg_color_active = (
-                        min(255, bg_color[0] + 25),
-                        min(255, bg_color[1] + 15),
-                        min(255, bg_color[2] + 20)
-                    )
-                    screen_lines[r] = center_active_lyric(text, cols, bg_color_active, fg_color, accent_fg)
+                    screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height, text=text, is_active=True, lyric_fg=fg_color, accent_fg=accent_fg, bold=True)
                 else:
                     distance = abs(idx - display_idx)
                     max_dist = max(1, lyric_rows // (2 * spacing))
@@ -624,9 +746,9 @@ def render_ui(position, duration, artist, title):
                     fg_b = int(bg_b + (255 - bg_b) * opacity)
                     fg_color = (fg_r, fg_g, fg_b)
 
-                    screen_lines[r] = center_line(text, cols, bg_color, fg_color, bold=False)
+                    screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height, text=text, is_active=False, lyric_fg=fg_color, bold=False)
             else:
-                screen_lines[r] = make_empty_row(cols, get_bg_color(r, rows))
+                screen_lines[r] = render_canvas_row(r, rows, cols, header_height, footer_height)
                 
     for r in range(rows):
         if screen_lines[r] is None:
@@ -690,6 +812,56 @@ def player_query_worker():
             pass
         time.sleep(0.5)
 
+def cava_worker():
+    global spectrum_g, cava_running_g
+    if not shutil.which("cava"):
+        return
+    
+    num_bars = 48
+    config_content = f"""[general]
+bars = {num_bars}
+framerate = 30
+autosens = 1
+
+[output]
+method = raw
+raw_target = /dev/stdout
+data_format = ascii
+ascii_max_range = 1000
+"""
+    try:
+        with tempfile.NamedTemporaryFile("w+", delete=True, suffix=".ini") as temp_cfg:
+            temp_cfg.write(config_content)
+            temp_cfg.flush()
+            
+            process = subprocess.Popen(
+                ["cava", "-p", temp_cfg.name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                bufsize=1
+            )
+            cava_running_g = True
+            while True:
+                line = process.stdout.readline()
+                if not line:
+                    break
+                parts = line.strip().split(";")
+                new_spectrum = []
+                for p in parts:
+                    if p:
+                        try:
+                            val = min(1.0, max(0.0, int(p) / 1000.0))
+                            new_spectrum.append(val)
+                        except ValueError:
+                            pass
+                if new_spectrum:
+                    spectrum_g = new_spectrum
+    except Exception:
+        cava_running_g = False
+    finally:
+        cava_running_g = False
+
 def main():
     global current_track, lyrics_timeline, plain_lyrics
     global artist_g, title_g, duration_g, fetch_done, lyrics_cache
@@ -703,6 +875,10 @@ def main():
     # Start the player query background thread
     t_query = threading.Thread(target=player_query_worker, daemon=True)
     t_query.start()
+
+    # Start the cava audio visualizer background thread
+    t_cava = threading.Thread(target=cava_worker, daemon=True)
+    t_cava.start()
 
     try:
         while True:
